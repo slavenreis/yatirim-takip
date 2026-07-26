@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yatırım Takip</title>
+<script src="/vendor/lightweight-charts.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card-bg: #1a1d24;
+    --border: #2a2e38;
+    --text: #e8e9ec;
+    --muted: #8a8f9c;
+    --green: #2ecc71;
+    --red: #ff5c5c;
+    --accent: #4a9eff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 28px 0 12px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card.clickable {
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .card.clickable:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .card .name {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card .price {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .card .price-try {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .card .change {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .mini-chart {
+    position: relative;
+    height: 70px;
+    margin: 8px -4px -4px;
+    overflow: hidden;
+    border-radius: 6px;
+  }
+  .change.up { color: var(--green); }
+  .change.down { color: var(--red); }
+  .empty { color: var(--muted); font-size: 13px; }
+  #status {
+    position: fixed;
+    top: 16px;
+    right: 24px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 24px;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+  .modal-header h2 { font-size: 18px; margin: 0 0 4px; }
+  .modal-header .modal-ticker { color: var(--muted); font-size: 13px; }
+  .modal-close {
+    background: transparent;
+    color: var(--muted);
+    font-size: 20px;
+    padding: 0 6px;
+    margin: 0;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-section { margin-bottom: 20px; }
+  .modal-section h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  .modal-link {
+    display: inline-block;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 13px;
+  }
+  .modal-link:hover { text-decoration: underline; }
+  .info-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .info-box .info-date { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .info-box .info-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .info-box .info-summary { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .disclosure-list { display: flex; flex-direction: column; gap: 8px; }
+  .disclosure-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .disclosure-item .disclosure-title { color: var(--text); }
+  .disclosure-item .disclosure-date { color: var(--muted); white-space: nowrap; }
+  .modal-loading { color: var(--muted); font-size: 13px; }
+  .chart-modal .modal { max-width: 820px; }
+  .big-chart-container { height: 480px; position: relative; }
+  .chart-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .tool-btn {
+    background: var(--bg);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 0;
+  }
+  .tool-btn:hover { color: var(--text); border-color: var(--accent); }
+  .tool-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .tool-btn.tool-clear { margin-left: auto; }
+</style>
+</head>
+<body>
+  <div id="status">
+    <span id="last-update">yükleniyor...</span>
+    <button id="refresh-btn" onclick="manualRefresh()">Yenile</button>
+  </div>
+
+  <h1>Yatırım Takip</h1>
+  <div class="subtitle">BIST30 · Altın/Gümüş · Emtia · Döviz — 15 dakikada bir otomatik güncellenir</div>
+
+  <div class="section-title">BIST30</div>
+  <div class="grid" id="bist30-grid"><div class="empty">Yükleniyor...</div></div>
+
+  <div class="section-title">Altın / Gümüş</div>
+  <div class="grid" id="metal-grid"><div class="empty">Yükleniyor...</div></div>
+
+  <div class="section-title">Emtia</div>
+  <div class="grid" id="commodity-grid"><div class="empty">Yükleniyor...</div></div>
+
+  <div class="section-title">Döviz</div>
+  <div class="grid" id="currency-grid"><div class="empty">Yükleniyor...</div></div>
+
+  <div class="modal-overlay hidden" id="kap-modal-overlay" onclick="closeKapModalOnOverlay(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="kap-modal-title">-</h2>
+          <div class="modal-ticker" id="kap-modal-ticker">-</div>
+        </div>
+        <button class="modal-close" onclick="closeKapModal()">&times;</button>
+      </div>
+      <div class="modal-section">
+        <div class="chart-toolbar" id="toolbar-kap-modal-chart"></div>
+        <div id="kap-modal-chart" class="big-chart-container" style="height:300px;"></div>
+      </div>
+      <div id="kap-modal-body"><div class="modal-loading">Yükleniyor...</div></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden chart-modal" id="chart-modal-overlay" onclick="closeChartModalOnOverlay(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <div>
+          <h2 id="chart-modal-title">-</h2>
+          <div class="modal-ticker" id="chart-modal-ticker">-</div>
+        </div>
+        <button class="modal-close" onclick="closeChartModal()">&times;</button>
+      </div>
+      <div class="chart-toolbar" id="toolbar-chart-modal-body"></div>
+      <div id="chart-modal-body" class="big-chart-container"></div>
+    </div>
+  </div>
+
+<script>
+function fmtPrice(v) {
+  return v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// --- Yerel grafikler (Lightweight Charts - TradingView'in açık kaynak kütüphanesi,
+// kendi fiyat geçmişimizden çiziyor, dış servise/hesaba bağımlı değil) ---
+const chartInstances = {};
+
+function safeId(ticker) {
+  return ticker.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function fetchHistory(ticker) {
+  return fetch('/api/history/' + encodeURIComponent(ticker))
+    .then(function (r) { return r.json(); })
+    .then(function (data) { return data.points || []; });
+}
+
+function disposeChart(key) {
+  if (chartInstances[key]) {
+    try { chartInstances[key].remove(); } catch (e) {}
+    delete chartInstances[key];
+  }
+}
+
+function initMiniChart(category, q) {
+  const el = document.getElementById('chart-' + category + '-' + safeId(q.ticker));
+  if (!el || el.dataset.loaded) return;
+  el.dataset.loaded = '1';
+
+  fetchHistory(q.ticker).then(function (points) {
+    if (!points || points.length < 2) {
+      el.innerHTML = '<div class="empty" style="font-size:11px;">Geçmiş veri birikiyor...</div>';
+      return;
+    }
+    const isUp = points[points.length - 1].c >= points[0].c;
+    const color = isUp ? '#2ecc71' : '#ff5c5c';
+
+    const chart = LightweightCharts.createChart(el, {
+      width: el.clientWidth || 180,
+      height: el.clientHeight || 70,
+      layout: { background: { color: 'transparent' }, textColor: 'transparent' },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      rightPriceScale: { visible: false },
+      leftPriceScale: { visible: false },
+      timeScale: { visible: false },
+      crosshair: {
+        vertLine: { visible: false, labelVisible: false },
+        horzLine: { visible: false, labelVisible: false },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
+    const series = chart.addAreaSeries({
+      lineColor: color,
+      topColor: color + '33',
+      bottomColor: color + '00',
+      lineWidth: 1.5,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    series.setData(points.map(function (p) { return { time: p.t, value: p.c }; }));
+    chart.timeScale().fitContent();
+    chartInstances['mini-' + category + '-' + safeId(q.ticker)] = chart;
+  });
+}
+
+function buildCardHtml(category, q, clickable) {
+  const isUp = q.change_pct >= 0;
+  const cls = isUp ? 'up' : 'down';
+  const sign = isUp ? '+' : '';
+  const tryLine = (q.price_try != null)
+    ? '<div class="price-try">≈ ' + fmtPrice(q.price_try) + ' TRY</div>'
+    : '';
+  const cardClass = clickable ? 'card clickable' : 'card clickable';
+  const nameEscaped = q.name.replace(/'/g, "\\'");
+  const clickAttr = category === 'bist30'
+    ? ' onclick="openKapModal(\'' + q.ticker + '\', \'' + nameEscaped + '\')"'
+    : ' onclick="openChartModal(\'' + category + '\', \'' + q.ticker + '\', \'' + nameEscaped + '\')"';
+  return (
+    '<div class="' + cardClass + '" data-ticker="' + q.ticker + '"' + clickAttr + '>' +
+      '<div class="name" title="' + q.ticker + '">' + q.name + '</div>' +
+      '<div class="price">' + fmtPrice(q.price) + ' ' + q.currency + '</div>' +
+      tryLine +
+      '<div class="change ' + cls + '">' + sign + q.change_pct.toFixed(2) + '%</div>' +
+      '<div class="mini-chart" id="chart-' + category + '-' + safeId(q.ticker) + '"></div>' +
+    '</div>'
+  );
+}
+
+function upsertGrid(elId, category, items, clickable) {
+  const el = document.getElementById(elId);
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="empty">Veri yok</div>';
+    return;
+  }
+
+  const existingCards = Array.from(el.querySelectorAll('.card'));
+  const existingTickers = existingCards.map(function (c) { return c.dataset.ticker; });
+  const sameSet = existingTickers.length === items.length &&
+    items.every(function (q, i) { return existingTickers[i] === q.ticker; });
+
+  if (!sameSet) {
+    el.innerHTML = items.map(function (q) { return buildCardHtml(category, q, clickable); }).join('');
+    items.forEach(function (q) { initMiniChart(category, q); });
+    return;
+  }
+
+  items.forEach(function (q, i) {
+    const card = existingCards[i];
+    const isUp = q.change_pct >= 0;
+    card.querySelector('.price').textContent = fmtPrice(q.price) + ' ' + q.currency;
+    const tryEl = card.querySelector('.price-try');
+    if (tryEl) {
+      tryEl.textContent = q.price_try != null ? ('≈ ' + fmtPrice(q.price_try) + ' TRY') : '';
+    }
+    const chEl = card.querySelector('.change');
+    chEl.className = 'change ' + (isUp ? 'up' : 'down');
+    chEl.textContent = (isUp ? '+' : '') + q.change_pct.toFixed(2) + '%';
+  });
+}
+
+function loadQuotes() {
+  fetch('/api/quotes')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      upsertGrid('bist30-grid', 'bist30', data.bist30, true);
+      upsertGrid('metal-grid', 'metal', data.metal);
+      upsertGrid('commodity-grid', 'commodity', data.commodity);
+      upsertGrid('currency-grid', 'currency', data.currency);
+      document.getElementById('last-update').textContent =
+        'Son güncelleme: ' + new Date().toLocaleTimeString('tr-TR');
+    })
+    .catch(function (err) {
+      document.getElementById('last-update').textContent = 'Bağlantı hatası';
+      console.error(err);
+    });
+}
+
+function manualRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = 'Yenileniyor...';
+  fetch('/api/refresh', { method: 'POST' })
+    .then(function () { loadQuotes(); })
+    .finally(function () {
+      btn.disabled = false;
+      btn.textContent = 'Yenile';
+    });
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderDisclosureBox(title, d, emptyText, kapUrl) {
+  if (!d) {
+    return (
+      '<div class="modal-section"><h3>' + title + '</h3>' +
+      '<div class="info-box"><div class="info-summary">' + emptyText + '</div>' +
+      '<a class="modal-link" href="' + kapUrl + '" target="_blank" rel="noopener">KAP sayfasında görüntüle →</a></div></div>'
+    );
+  }
+  return (
+    '<div class="modal-section"><h3>' + title + '</h3>' +
+    '<div class="info-box">' +
+      '<div class="info-date">' + escapeHtml(d.publish_date) + '</div>' +
+      '<div class="info-title">' + escapeHtml(d.title) + '</div>' +
+      '<div class="info-summary">' + escapeHtml(d.summary) + '</div>' +
+      '<a class="modal-link" href="' + d.url + '" target="_blank" rel="noopener">KAP\'ta görüntüle →</a>' +
+    '</div></div>'
+  );
+}
+
+// --- Çizim araçları (trend çizgisi, destek/direnç) ---
+const chartDrawState = {}; // containerId -> { chart, series, mode, drawings, ticker, drag }
+const DRAW_COLOR = '#f5a623';
+
+function drawStorageKey(ticker) {
+  return 'drawings_' + ticker;
+}
+
+function loadSavedDrawings(ticker) {
+  try {
+    return JSON.parse(localStorage.getItem(drawStorageKey(ticker)) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function persistDrawings(containerId) {
+  const state = chartDrawState[containerId];
+  if (!state) return;
+  const plain = state.drawings.map(function (d) {
+    return d.type === 'hline'
+      ? { type: 'hline', price: d.price }
+      : { type: 'trendline', p1: d.p1, p2: d.p2 };
+  });
+  localStorage.setItem(drawStorageKey(state.ticker), JSON.stringify(plain));
+}
+
+function applyDrawing(containerId, d) {
+  const state = chartDrawState[containerId];
+  if (d.type === 'hline') {
+    d._obj = state.series.createPriceLine({
+      price: d.price,
+      color: DRAW_COLOR,
+      lineWidth: 2,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: 'Destek/Direnç',
+    });
+  } else if (d.type === 'trendline') {
+    let p1 = d.p1, p2 = d.p2;
+    if (p1.time > p2.time) { const tmp = p1; p1 = p2; p2 = tmp; }
+    const lineSeries = state.chart.addLineSeries({
+      color: DRAW_COLOR,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    lineSeries.setData([
+      { time: p1.time, value: p1.price },
+      { time: p2.time, value: p2.price },
+    ]);
+    d._obj = lineSeries;
+  }
+}
+
+function setDrawMode(containerId, mode) {
+  const state = chartDrawState[containerId];
+  if (!state) return;
+  if (state.drag && state.drag.kind === 'new-trendline') {
+    state.chart.removeSeries(state.drag.tempObj);
+  }
+  if (state.drag) {
+    state.chart.applyOptions({ handleScroll: true, handleScale: true });
+  }
+  state.drag = null;
+  state.mode = mode;
+  const container = document.getElementById(containerId);
+  if (container) container.style.cursor = '';
+  const toolbar = document.getElementById('toolbar-' + containerId);
+  if (toolbar) {
+    toolbar.querySelectorAll('.tool-btn[data-tool]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.tool === mode);
+    });
+  }
+}
+
+function clearDrawings(containerId) {
+  const state = chartDrawState[containerId];
+  if (!state) return;
+  state.drawings.forEach(function (d) {
+    if (d.type === 'hline' && d._obj) state.series.removePriceLine(d._obj);
+    if (d.type === 'trendline' && d._obj) state.chart.removeSeries(d._obj);
+  });
+  state.drawings = [];
+  state.drag = null;
+  localStorage.removeItem(drawStorageKey(state.ticker));
+}
+
+const HIT_TOLERANCE_PX = 7;
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq === 0 ? 0 : ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x1 + t * dx, cy = y1 + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function hitTestDrawing(state, x, y) {
+  for (let i = state.drawings.length - 1; i >= 0; i--) {
+    const d = state.drawings[i];
+    if (d.type === 'hline') {
+      const ly = state.series.priceToCoordinate(d.price);
+      if (ly != null && Math.abs(y - ly) <= HIT_TOLERANCE_PX) return d;
+    } else if (d.type === 'trendline') {
+      const x1 = state.chart.timeScale().timeToCoordinate(d.p1.time);
+      const y1 = state.series.priceToCoordinate(d.p1.price);
+      const x2 = state.chart.timeScale().timeToCoordinate(d.p2.time);
+      const y2 = state.series.priceToCoordinate(d.p2.price);
+      if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+      if (distToSegment(x, y, x1, y1, x2, y2) <= HIT_TOLERANCE_PX) return d;
+    }
+  }
+  return null;
+}
+
+function drawToolbarHtml(containerId) {
+  return (
+    '<button class="tool-btn active" data-tool="cursor" onclick="setDrawMode(\'' + containerId + '\',\'cursor\')">🖐 İmleç</button>' +
+    '<button class="tool-btn" data-tool="trendline" onclick="setDrawMode(\'' + containerId + '\',\'trendline\')">📈 Trend Çizgisi</button>' +
+    '<button class="tool-btn" data-tool="hline" onclick="setDrawMode(\'' + containerId + '\',\'hline\')">➖ Destek/Direnç</button>' +
+    '<button class="tool-btn tool-clear" onclick="clearDrawings(\'' + containerId + '\')">🗑 Temizle</button>'
+  );
+}
+
+function eventToChartCoords(container, evt) {
+  const rect = container.getBoundingClientRect();
+  return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+}
+
+function setupDrawingTools(containerId, ticker, chart, series) {
+  const container = document.getElementById(containerId);
+  const state = {
+    chart: chart,
+    series: series,
+    mode: 'cursor',
+    drawings: [],
+    ticker: ticker,
+    drag: null, // { kind: 'new-trendline' | 'move-hline' | 'move-trendline', ... }
+  };
+  chartDrawState[containerId] = state;
+
+  const toolbar = document.getElementById('toolbar-' + containerId);
+  if (toolbar) toolbar.innerHTML = drawToolbarHtml(containerId);
+
+  loadSavedDrawings(ticker).forEach(function (d) {
+    applyDrawing(containerId, d);
+    state.drawings.push(d);
+  });
+
+  function onMouseMove(evt) {
+    const s = chartDrawState[containerId];
+    if (!s || !s.drag) return;
+    const pt = eventToChartCoords(container, evt);
+    const price = s.series.coordinateToPrice(pt.y);
+    if (price == null) return;
+
+    if (s.drag.kind === 'new-trendline') {
+      const time = s.chart.timeScale().coordinateToTime(pt.x);
+      s.drag.p2 = { time: time != null ? time : s.drag.p2.time, price: price };
+      s.drag.tempObj.setData([
+        { time: s.drag.p1.time, value: s.drag.p1.price },
+        { time: s.drag.p2.time, value: s.drag.p2.price },
+      ]);
+    } else if (s.drag.kind === 'move-hline') {
+      s.drag.drawing.price = price;
+      s.drag.drawing._obj.applyOptions({ price: price });
+    } else if (s.drag.kind === 'move-trendline') {
+      const deltaPrice = price - s.drag.startPrice;
+      const d = s.drag.drawing;
+      const newP1 = s.drag.origP1 + deltaPrice;
+      const newP2 = s.drag.origP2 + deltaPrice;
+      d.p1.price = newP1;
+      d.p2.price = newP2;
+      d._obj.setData([
+        { time: d.p1.time, value: newP1 },
+        { time: d.p2.time, value: newP2 },
+      ]);
+    }
+  }
+
+  function onMouseUp(evt) {
+    const s = chartDrawState[containerId];
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+    if (!s || !s.drag) return;
+
+    const wasNewTrendline = s.drag.kind === 'new-trendline';
+    if (wasNewTrendline) {
+      s.chart.removeSeries(s.drag.tempObj);
+      const p1 = s.drag.p1, p2 = s.drag.p2;
+      if (p1.time !== p2.time || p1.price !== p2.price) {
+        const d = { type: 'trendline', p1: p1, p2: p2 };
+        applyDrawing(containerId, d);
+        s.drawings.push(d);
+      }
+    }
+
+    s.drag = null;
+    s.chart.applyOptions({ handleScroll: true, handleScale: true });
+    persistDrawings(containerId);
+    if (wasNewTrendline) setDrawMode(containerId, 'cursor');
+  }
+
+  container.addEventListener('mousedown', function (evt) {
+    const s = chartDrawState[containerId];
+    if (!s) return;
+    const pt = eventToChartCoords(container, evt);
+    const price = s.series.coordinateToPrice(pt.y);
+
+    if (s.mode === 'hline') {
+      if (price == null) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      const d = { type: 'hline', price: price };
+      applyDrawing(containerId, d);
+      s.drawings.push(d);
+      persistDrawings(containerId);
+      setDrawMode(containerId, 'cursor');
+      return;
+    }
+
+    if (s.mode === 'trendline') {
+      const time = s.chart.timeScale().coordinateToTime(pt.x);
+      if (price == null || time == null) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      s.chart.applyOptions({ handleScroll: false, handleScale: false });
+      const tempObj = s.chart.addLineSeries({
+        color: DRAW_COLOR,
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      const p1 = { time: time, price: price };
+      tempObj.setData([{ time: p1.time, value: p1.price }, { time: p1.time, value: p1.price }]);
+      s.drag = { kind: 'new-trendline', p1: p1, p2: p1, tempObj: tempObj };
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      return;
+    }
+
+    // cursor modu: mevcut bir çizimi tutup sürükleme
+    if (s.mode === 'cursor') {
+      const hit = hitTestDrawing(s, pt.x, pt.y);
+      if (!hit) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      s.chart.applyOptions({ handleScroll: false, handleScale: false });
+      if (hit.type === 'hline') {
+        s.drag = { kind: 'move-hline', drawing: hit };
+      } else {
+        s.drag = { kind: 'move-trendline', drawing: hit, startPrice: price, origP1: hit.p1.price, origP2: hit.p2.price };
+      }
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    }
+  }, true);
+
+  // İmleç modunda çizim üzerine gelince el işareti göster
+  container.addEventListener('mousemove', function (evt) {
+    const s = chartDrawState[containerId];
+    if (!s || s.mode !== 'cursor' || s.drag) return;
+    const pt = eventToChartCoords(container, evt);
+    const hit = hitTestDrawing(s, pt.x, pt.y);
+    container.style.cursor = hit ? 'grab' : '';
+  });
+}
+
+function loadBigChart(containerId, ticker) {
+  const container = document.getElementById(containerId);
+  disposeChart(containerId);
+  delete chartDrawState[containerId];
+  const toolbarEl = document.getElementById('toolbar-' + containerId);
+  if (toolbarEl) toolbarEl.innerHTML = '';
+  container.innerHTML = '<div class="modal-loading">Grafik yükleniyor...</div>';
+  fetchHistory(ticker).then(function (points) {
+    if (!points || points.length < 2) {
+      container.innerHTML = '<div class="modal-loading">Yeterli geçmiş veri henüz birikmedi. Veriler 15 dakikada bir toplanıyor, bir süre sonra tekrar deneyin.</div>';
+      return;
+    }
+    container.innerHTML = '';
+
+    const chart = LightweightCharts.createChart(container, {
+      width: container.clientWidth,
+      height: container.clientHeight,
+      layout: { background: { color: 'transparent' }, textColor: '#8a8f9c' },
+      grid: { vertLines: { color: '#2a2e38' }, horzLines: { color: '#2a2e38' } },
+      rightPriceScale: { borderColor: '#2a2e38' },
+      timeScale: { borderColor: '#2a2e38', timeVisible: true },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    });
+    const series = chart.addCandlestickSeries({
+      upColor: '#2ecc71',
+      downColor: '#ff5c5c',
+      borderVisible: false,
+      wickUpColor: '#2ecc71',
+      wickDownColor: '#ff5c5c',
+    });
+    series.setData(points.map(function (p) {
+      return { time: p.t, open: p.o, high: p.h, low: p.l, close: p.c };
+    }));
+    chart.timeScale().fitContent();
+    chartInstances[containerId] = chart;
+
+    setupDrawingTools(containerId, ticker, chart, series);
+
+    const resizeHandler = function () {
+      if (container.clientWidth > 0) chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    };
+    window.addEventListener('resize', resizeHandler);
+    setTimeout(resizeHandler, 50);
+  });
+}
+
+function openKapModal(ticker, name) {
+  const overlay = document.getElementById('kap-modal-overlay');
+  const body = document.getElementById('kap-modal-body');
+  document.getElementById('kap-modal-title').textContent = name;
+  document.getElementById('kap-modal-ticker').textContent = ticker;
+  body.innerHTML = '<div class="modal-loading">KAP verileri yükleniyor...</div>';
+  overlay.classList.remove('hidden');
+  loadBigChart('kap-modal-chart', ticker);
+
+  fetch('/api/kap/' + encodeURIComponent(ticker))
+    .then(function (r) {
+      if (!r.ok) throw new Error('KAP verisi alınamadı');
+      return r.json();
+    })
+    .then(function (data) {
+      let html = '';
+      html += '<div class="modal-section"><a class="modal-link" href="' + data.kap_url +
+        '" target="_blank" rel="noopener">Şirketin KAP sayfasını aç →</a></div>';
+
+      html += renderDisclosureBox(
+        'Temettü / Kar Payı',
+        data.dividend,
+        'Son dönemde temettü bildirimi bulunamadı.',
+        data.kap_url
+      );
+      html += renderDisclosureBox(
+        'Faaliyet Raporu',
+        data.annual_report,
+        'Faaliyet raporu bulunamadı.',
+        data.kap_url
+      );
+
+      html += '<div class="modal-section"><h3>Son Bildirimler</h3><div class="disclosure-list">';
+      if (data.disclosures && data.disclosures.length > 0) {
+        html += data.disclosures.map(function (d) {
+          return (
+            '<a class="disclosure-item" href="' + d.url + '" target="_blank" rel="noopener" style="text-decoration:none;">' +
+              '<span class="disclosure-title">' + escapeHtml(d.title) + '</span>' +
+              '<span class="disclosure-date">' + escapeHtml(d.publish_date) + '</span>' +
+            '</a>'
+          );
+        }).join('');
+      } else {
+        html += '<div class="info-summary">Bildirim bulunamadı.</div>';
+      }
+      html += '</div></div>';
+
+      body.innerHTML = html;
+    })
+    .catch(function (err) {
+      body.innerHTML = '<div class="modal-loading">KAP verisi alınamadı. Lütfen tekrar deneyin.</div>';
+      console.error(err);
+    });
+}
+
+function closeKapModal() {
+  document.getElementById('kap-modal-overlay').classList.add('hidden');
+}
+
+function closeKapModalOnOverlay(event) {
+  if (event.target.id === 'kap-modal-overlay') closeKapModal();
+}
+
+function openChartModal(category, ticker, name) {
+  document.getElementById('chart-modal-title').textContent = name;
+  document.getElementById('chart-modal-ticker').textContent = ticker;
+  document.getElementById('chart-modal-overlay').classList.remove('hidden');
+  loadBigChart('chart-modal-body', ticker);
+}
+
+function closeChartModal() {
+  document.getElementById('chart-modal-overlay').classList.add('hidden');
+}
+
+function closeChartModalOnOverlay(event) {
+  if (event.target.id === 'chart-modal-overlay') closeChartModal();
+}
+
+loadQuotes();
+setInterval(loadQuotes, 60 * 1000);
+</script>
+</body>
+</html>
