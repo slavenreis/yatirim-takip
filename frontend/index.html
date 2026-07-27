@@ -2,8 +2,18 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Yatırım Takip</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" href="/icons/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Yatırım Takip">
+
 <script src="/vendor/lightweight-charts.js"></script>
 <style>
   :root {
@@ -85,6 +95,7 @@
   .change.up { color: var(--green); }
   .change.down { color: var(--red); }
   .empty { color: var(--muted); font-size: 13px; }
+  #install-btn.hidden { display: none; }
   #status {
     position: fixed;
     top: 16px;
@@ -210,6 +221,7 @@
 <body>
   <div id="status">
     <span id="last-update">yükleniyor...</span>
+    <button id="install-btn" onclick="installApp()" class="hidden">Uygulamayı Yükle</button>
     <button id="refresh-btn" onclick="manualRefresh()">Yenile</button>
   </div>
 
@@ -837,6 +849,35 @@ function closeChartModalOnOverlay(event) {
 
 loadQuotes();
 setInterval(loadQuotes, 60 * 1000);
+
+// --- PWA: service worker kaydı + "Ana ekrana ekle" davranışı ---
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/service-worker.js').catch(function (err) {
+      console.error('Service worker kaydı başarısız:', err);
+    });
+  });
+}
+
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function (event) {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  document.getElementById('install-btn').classList.remove('hidden');
+});
+
+function installApp() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.finally(function () {
+    deferredInstallPrompt = null;
+    document.getElementById('install-btn').classList.add('hidden');
+  });
+}
+
+window.addEventListener('appinstalled', function () {
+  document.getElementById('install-btn').classList.add('hidden');
+});
 </script>
 </body>
 </html>
